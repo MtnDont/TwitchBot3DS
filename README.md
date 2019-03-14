@@ -2,7 +2,7 @@
 Run a Twitch Bot straight from your 3DS
 
 ## Important
-Create a file named oauth.config with your oauth inside and place it in the same directory as the .3dsx
+You will be required to login using your Twitch oauth code which you can find [here](https://twitchapps.com/tmi/). After you type it in once, a file called oauth.config will be created in the directory containing your .3dsx. To avoid typing it in on the 3DS, you can type out your oauth onto the config file and place it in the same directory.
 
 ## Commands
 * !hello
