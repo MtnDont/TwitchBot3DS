@@ -1,11 +1,12 @@
 /*
     hi
-	hi - MtnDont 3/19/2018 7:30 PM
+    hi - MtnDont 3/19/2018 7:30 PM
+	hey - MtnDont 10/24/2018 10:23 AM
 */
 
 const char* DEFAULT_SERVER = "irc.chat.twitch.tv";
-const char* DEFAULT_NICK = "mtnbot1298";
-
+const char* DEFAULT_NICK = "";
+const char* DEFAULT_PASS = "oauth:";
 #define SOC_ALIGN       0x1000
 #define SOC_BUFFERSIZE  0x100000
 
@@ -35,6 +36,7 @@ const char* DEFAULT_NICK = "mtnbot1298";
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <malloc.h>
+#include <time.h>
 
 #include "img_keyboard_bgr.h"
 
@@ -53,8 +55,6 @@ char* KBD_SHIFT[] = {"1234567890_\b\b",
                    "QWERTYUIOP\n\n\n",
                    "ASDFGHJKL\"*\\\\",
                    "ZXCVBNM<>:;#"};
-
-char* passFromFile;
 
 u32 key_down;
 u32 key_held;
@@ -82,7 +82,9 @@ char server_address[256] = {};
 char nick[256] = {};
 char channel[256] = {};
 char message[256] = {};
-
+char passFromFile[36] = {};
+bool oauthEmpty = false;
+bool sockSet;
 
 int kbd_pos = 0;
 bool kbd_done = false;
@@ -147,6 +149,79 @@ void do_kbd() {
     printf("\x1b[0;0H%s %s ", kbd_query, kbd_input);
 }
 
+void parse_command(char* target, char* source, char* message) {
+    char out[1024] = {};
+    char* commandToTest = message+1;
+	char* command = strtok(commandToTest, " ");
+	
+	if (strcmp(commandToTest, "!hello") == 0 && sockSet) {
+		//Something crashes here now on TODO
+		sprintf(out, "PRIVMSG #%s :Hello World!\r\n", channel);
+		send(sockfd, out, strlen(out), 0);
+		consoleSelect(&window_log);
+		//From 3DS
+		printf("<\x1b[35m%s\x1b[0m> %s\n", nick, "Hello World!");
+	}
+	else if (strcmp(command, "!return") == 0 && sockSet) {
+		char* strToReturn = strtok(NULL, " ");
+		if (strToReturn != NULL) {
+			//This comment is memory testing
+			/*
+			char strOut[512] = "PRIVMSG #";
+			strcat(strOut, channel);
+			strcat(strOut, " :");
+			strcat(strOut, strToReturn);
+			strcat(strOut, "\r\n");
+			
+			sprintf(out, strOut);
+			*/
+			sprintf(out, "PRIVMSG #%s :%s\r\n", channel, strToReturn);
+			send(sockfd, out, strlen(out), 0);
+			consoleSelect(&window_log);
+			//From 3DS
+			printf("<\x1b[35m%s\x1b[0m> %s\n", nick, strToReturn);
+		}
+	}
+	else if (strcmp(command, "!roll") == 0 && sockSet) {
+		srand(time(NULL));
+		int randNum = rand() % 20 + 1;
+		char str[20];
+		char randStr[13];
+		//Rolled a [num]!
+		strcpy(randStr, "Rolled a ");
+		strcpy(str, randStr);
+		itoa(randNum, randStr, 10);
+		strcat(str, randStr);
+		strcat(str, "!");
+		
+		//20 Crit!
+		//1 Crit fail...
+		//else Rolled a [num]!
+		if (randNum == 20) {
+			sprintf(out, "PRIVMSG #%s :%s\r\n", channel, "Critical!");
+			strcpy(randStr, "Critical!");
+		}
+		else if (randNum == 1) {
+			sprintf(out, "PRIVMSG #%s :%s\r\n", channel, "Crit fail...");
+			strcpy(randStr, "Crit fail...");
+		}
+		else {
+			sprintf(out, "PRIVMSG #%s :%s\r\n", channel, str);
+		}
+		send(sockfd, out, strlen(out), 0);
+		consoleSelect(&window_log);
+		//From 3DS
+		printf("<\x1b[35m%s\x1b[0m> %s\n", nick, str);
+	}
+	//!modme times you out
+	else if (strcmp(commandToTest, "!modme") == 0 && sockSet) {
+		sprintf(out, "PRIVMSG #%s :/timeout %s 60\r\n", channel, source);
+		send(sockfd, out, strlen(out), 0);
+		consoleSelect(&window_log);
+		printf("<\x1b[35m%s\x1b[0m> /timeout %s 60\n", nick, source);
+	}
+}
+
 void parse_irc(char* str) {
     consoleSelect(&window_log);
     char out[1024] = {};
@@ -169,7 +244,12 @@ void parse_irc(char* str) {
         char* target = strtok(NULL, " ");
         char* rest = strtok(NULL, "\r");
         if (!strcmp(target+1, channel)) {
+            //This is sent from chat
+            //source = user
+            //rest + 1 = message
             printf("\x1b[1m<\x1b[35m%s\x1b[0m> %s\x1b[0m\n", source, rest+1);
+            parse_command(target, source, rest);
+            //printf("sent from channel");
         } else {
             printf("\x1b[1m[->%s] <\x1b[35m%s\x1b[0m> %s\x1b[0m\n", target, source, rest+1);
         }
@@ -206,11 +286,19 @@ int main(int argc, char **argv)
     consoleSelect(&window_log);
     printf("\x1b[0;0H * 3DSTwitchBot v0.1 * \n\n");
 
-	char buff[37];
-	FILE *file = fopen("oauth.config","w+");
-	fgets(buff, 37, (FILE*)file);
-	passFromFile = buff;
-	
+    //Get file with Oauth
+    FILE *file;
+    if ((file = fopen("oauth.config","r+")) == NULL) {
+        file = fopen("oauth.config","w+");
+        oauthEmpty = true;
+    } else {
+        file = fopen("oauth.config","r+");
+    }
+    fgets(passFromFile, 37, (FILE*)file);
+    fclose(file);
+    file = fopen("oauth.config", "w+");
+    fprintf(file, "%s", passFromFile);
+    
     SOC_buffer = (void*) memalign(0x1000, 0x100000);
     if(SOC_buffer == NULL)
         return -1;
@@ -268,7 +356,7 @@ int main(int argc, char **argv)
         get_input();
         if (key_down & KEY_START) break;
 
-        do_kbd();
+        //do_kbd();
         
         if (state == STATE_ASK_SERVER) {
             kbd_setup("Server address:");
@@ -276,16 +364,32 @@ int main(int argc, char **argv)
             strcpy(kbd_input, DEFAULT_SERVER);
             kbd_pos = strlen(kbd_input);
         } else if (state == STATE_GET_SERVER) {
+            strcpy(server_address, kbd_input);
+            consoleSelect(&window_log);
+            printf("Server address: %s\n", server_address);
+            if (!gethostbyname(server_address)) {
+                printf("Resolving address failed\n");
+                state = STATE_ASK_SERVER;
+            } else {
+                state = STATE_ASK_NICK;
+            }
+        }
+		do_kbd();
+		if (state == STATE_ASK_PASS) {
+            kbd_setup("OAuth:");
+            if (strlen(passFromFile))
+                strcpy(kbd_input, passFromFile);
+            else
+                strcpy(kbd_input, DEFAULT_PASS);
+            kbd_pos = strlen(kbd_input);
+            state = STATE_GET_PASS;
+        } else if (state == STATE_GET_PASS) {
             if (kbd_done) {
-                strcpy(server_address, kbd_input);
+                strcpy(passFromFile, kbd_input);
+                fprintf(file, "%s", passFromFile);
                 consoleSelect(&window_log);
-                printf("Server address: %s\n", server_address);
-                if (!gethostbyname(server_address)) {
-                    printf("Resolving address failed\n");
-                    state = STATE_ASK_SERVER;
-                } else {
-                    state = STATE_ASK_NICK;
-                }
+                printf("OAuth: %s\n", nick);
+                state = STATE_CONNECT;
             }
         } else if (state == STATE_ASK_NICK) {
             kbd_setup("Nick:");
@@ -297,7 +401,7 @@ int main(int argc, char **argv)
                 strcpy(nick, kbd_input);
                 consoleSelect(&window_log);
                 printf("Nick: %s\n", nick);
-                state = STATE_CONNECT;
+                state = STATE_ASK_PASS;
             }
         } else if (state == STATE_CONNECT) {
             consoleSelect(&window_log);
@@ -308,6 +412,8 @@ int main(int argc, char **argv)
                 state = STATE_ASK_SERVER;
                 continue;
             }
+            else
+                sockSet = true;
             
             serv_addr.sin_family = AF_INET;
             serv_addr.sin_port = htons(6667);
@@ -328,16 +434,16 @@ int main(int argc, char **argv)
             }
             
             printf("connected\n");
-            
-			//sends pass, nickname, and username
-			sprintf(out, "PASS %s\r\n", passFromFile);
-			send(sockfd, out, strlen(out), 0);
+            //sends pass, nickname, and username
+            sprintf(out, "PASS %s\r\n", passFromFile);
+            send(sockfd, out, strlen(out), 0);
             sprintf(out, "NICK %s\r\n", nick);
             send(sockfd, out, strlen(out), 0);
             sprintf(out, "USER %s irctr irctr :irctr\r\n", nick);
             send(sockfd, out, strlen(out), 0);
             
             printf("sent PASS, NICK, and USER\n");
+            printf("%s\n", passFromFile);
             connected = true;
             result = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);
             if (result < 0) {
@@ -371,13 +477,33 @@ int main(int argc, char **argv)
                 printf(" < Parted #%s\n", channel);
                 state = STATE_ASK_CHANNEL;
             }
-            if (kbd_done) {
+			//This is from an unfinished project
+			/*else if (key_down & KEY_A) {
+				sprintf(out, "PRIVMSG #%s :RIGHT\r\n", channel);
+				send(sockfd, out, strlen(out), 0);
+				consoleSelect(&window_log);
+				printf("<\x1b[31mRIGHT\x1b[0m>\n");
+			}
+			else if (key_down & KEY_X) {
+				sprintf(out, "PRIVMSG #%s :STRAIGHT\r\n", channel);
+				send(sockfd, out, strlen(out), 0);
+				consoleSelect(&window_log);
+				printf("<\x1b[31mSTRAIGHT\x1b[0m>\n");
+			}
+			else if (key_down & KEY_Y) {
+				sprintf(out, "PRIVMSG #%s :LEFT\r\n", channel);
+				send(sockfd, out, strlen(out), 0);
+				consoleSelect(&window_log);
+				printf("<\x1b[31mLEFT\x1b[0m>\n");
+			}*/
+			//The key_down & KEY_A allows messages to be sent with the A button
+            if (kbd_done || (key_down & KEY_A)) {
                 strcpy(message, kbd_input);
                 
                 sprintf(out, "PRIVMSG #%s :%s\r\n", channel, message);
                 send(sockfd, out, strlen(out), 0);
                 consoleSelect(&window_log);
-				//From 3DS
+                //From 3DS
                 printf("<\x1b[35m%s\x1b[0m> %s\n", nick, message);
                 
                 state = STATE_ASK_MSG;
@@ -390,7 +516,8 @@ int main(int argc, char **argv)
 
         gspWaitForVBlank();
     }
-
+    
+    fclose(file);
     //char* outquit = "QUIT :start pressed\r\n";
     //send(sockfd, outquit, strlen(outquit), 0);
         
