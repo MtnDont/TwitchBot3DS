@@ -1,0 +1,31 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "/usr/include",
+                "/usr/local/include",
+                "${workspaceFolder}/**",
+                "/opt/devkitpro/libctru/include",
+                "/opt/devkitpro/devkitARM/arm-none-eabi/include",
+                "/opt/devkitPro/devkitARM/lib/gcc/arm-none-eabi/9.1.0/include"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "clang-x64",
+            "browse": {
+                "path": [
+                    "/usr/include",
+                    "/usr/local/include",
+                    "${workspaceFolder}/include",
+                    "/opt/devkitpro/libctru/include",
+                    "/opt/devkitpro/devkitARM/arm-none-eabi/include",
+                    "/opt/devkitPro/devkitARM/lib/gcc/arm-none-eabi/8.1.0/include"
+                ]
+            }
+        }
+    ],
+    "version": 4
+}
